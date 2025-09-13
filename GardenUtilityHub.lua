@@ -1,5 +1,5 @@
 --// Load the UI Library
-local Library = loadstring(game:HttpGet("https://pastebin.com/raw/VHkYJF6H"))()
+local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/FranceBlade/GardenHub/refs/heads/main/MainUiLib"))()
 local Lib = Library.CreateLibrary("Binz Hub", "Grow a Garden")
 Library.CreateFloatingIcon(Lib, "rbxassetid://81222227536540", 56)
 
