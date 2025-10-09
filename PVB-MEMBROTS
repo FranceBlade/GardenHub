@@ -1,0 +1,92 @@
+--// Load the UI Library
+local Library = loadstring(game:HttpGet("https://pastebin.com/raw/LKivCcbW"))()
+
+--// Create Window
+local Lib = Library.CreateLibrary("MEMBROTS", "Plants vs Brainrots")
+
+local icon = Library.CreateFloatingIcon(Lib._mainFrame, "rbxassetid://125161562555332", 48)
+
+--// Tabs
+local Tab1 = Lib:AddTab("Home","rbxassetid://106809791072683")
+
+--// AutoBuy Seed
+local RunService = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local BuyEvent = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("BuyItem")
+
+local seeds = {
+"Cactus Seed",
+"Strawberry Seed",
+"Sunflower Seed",
+"Pumpkin Seed",
+"Dragon Fruit Seed",
+"Eggplant Seed",
+"Watermelon Seed",
+"Grape Seed",
+"Cocotank Seed",
+"Carnivorous Plant Seed",
+"Pine-a-Punch Seed",
+"Mr Carrot Seed",
+"Tomatrio Seed",
+"Shroombino Seed",
+"Mango Seed"
+}
+
+getgenv().AutoBuy = false
+
+local SeedDropdown = Tab1:AddDropdown("Pick Seed", seeds)
+SeedDropdown.OnChanged:Connect(function(val)
+getgenv().SelectedSeed = typeof(val) == "table" and val[1] or val
+end)
+
+Tab1:AddToggle("AutoBuy All Seeds", false, function(v)
+getgenv().AutoBuy = v
+end)
+
+RunService.Heartbeat:Connect(function()
+if getgenv().AutoBuy then
+for _, seed in ipairs(seeds) do
+if not getgenv().AutoBuy then break end
+pcall(function()
+BuyEvent:FireServer(seed, true)
+end)
+task.wait(1.5) -- delay between each buy
+end
+end
+end)
+
+--// AutoBuy Gear
+local RunService = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local BuyGearEvent = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("BuyGear")
+
+local gears = {
+"Water Bucket",
+"Frost Blower",
+"Frost Grenade",
+"Carrot Launcher",
+"Banana Gun"
+}
+
+getgenv().AutoBuyGear = false
+
+local GearDropdown = Tab1:AddDropdown("Pick Gear", gears)
+GearDropdown.OnChanged:Connect(function(val)
+getgenv().SelectedGear = typeof(val) == "table" and val[1] or val
+end)
+
+Tab1:AddToggle("AutoBuy Gears", false, function(v)
+getgenv().AutoBuyGear = v
+end)
+
+RunService.Heartbeat:Connect(function()
+if getgenv().AutoBuyGear then
+for _, gear in ipairs(gears) do
+if not getgenv().AutoBuyGear then break end
+pcall(function()
+BuyGearEvent:FireServer(gear, true)
+end)
+task.wait(1.5) -- delay between each buy
+end
+end
+end)
