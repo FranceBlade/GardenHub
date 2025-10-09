@@ -1,5 +1,5 @@
 --// Load the UI Library
-local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/FranceBlade/GardenHub/refs/heads/main/MYUILIB"))()
+local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/FranceBlade/GardenHub/refs/heads/main/KASH-UI"))()
 
 --// Create Window
 local Lib = Library.CreateLibrary("KASH TEST", "Plants vs Brainrots")
