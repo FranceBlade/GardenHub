@@ -1,0 +1,461 @@
+--// Load the UI Library
+local Library = loadstring(game:HttpGet("https://pastebin.com/raw/LKivCcbW"))()
+
+--// Create Window
+local Lib = Library.CreateLibrary("MEMBROTS", "Plants vs Brainrots")
+
+local icon = Library.CreateFloatingIcon(Lib._mainFrame, "rbxassetid://125161562555332", 48)
+
+--// Tabs
+local Tab1 = Lib:AddTab("Home","rbxassetid://77479668856839")
+local Tab2 = Lib:AddTab("Main","rbxassetid://99517913979491")
+local Tab3 = Lib:AddTab("Storage","rbxassetid://95872264727664")
+local Tab4 = Lib:AddTab("Others","rbxassetid://78943179033589")
+---------------------------------------------------
+--// Services
+local RunService = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+--// Remotes
+local Remotes = ReplicatedStorage:WaitForChild("Remotes")
+local BuySeedEvent = Remotes:WaitForChild("BuyItem")
+local BuyGearEvent = Remotes:WaitForChild("BuyGear")
+
+--// Lists
+local seeds = {
+    "Cactus Seed",
+    "Strawberry Seed",
+    "Sunflower Seed",
+    "Pumpkin Seed",
+    "Dragon Fruit Seed",
+    "Eggplant Seed",
+    "Watermelon Seed",
+    "Grape Seed",
+    "Cocotank Seed",
+    "Carnivorous Plant Seed",
+    "Pine-a-Punch Seed",
+    "Mr Carrot Seed",
+    "Tomatrio Seed",
+    "Shroombino Seed",
+    "Mango Seed",
+    "King Limone Seed"
+}
+
+local gears = {
+    "Water Bucket",
+    "Frost Blower",
+    "Frost Grenade",
+    "Carrot Launcher",
+    "Banana Gun"
+}
+
+--// Globals
+getgenv().AutoBuySeed = false
+getgenv().SelectedSeeds = {}
+
+getgenv().AutoBuyGear = false
+getgenv().SelectedGears = {}
+
+--// UI (Delta/Fluent-style)
+local SeedDropdown = Tab1:AddDropdown("Pick Seeds", seeds)
+SeedDropdown.OnChanged:Connect(function(val)
+    if typeof(val) == "table" then
+        getgenv().SelectedSeeds = val
+    else
+        getgenv().SelectedSeeds = { val }
+    end
+end)
+
+Tab1:AddToggle("AutoBuy Seeds", false, function(state)
+    getgenv().AutoBuySeed = state
+end)
+
+local GearDropdown = Tab1:AddDropdown("Pick Gears", gears)
+GearDropdown.OnChanged:Connect(function(val)
+    if typeof(val) == "table" then
+        getgenv().SelectedGears = val
+    else
+        getgenv().SelectedGears = { val }
+    end
+end)
+
+Tab1:AddToggle("AutoBuy Gears", false, function(state)
+    getgenv().AutoBuyGear = state
+end)
+
+--// AutoBuy Loop
+RunService.Heartbeat:Connect(function()
+    if getgenv().AutoBuySeed and #getgenv().SelectedSeeds > 0 then
+        for _, seed in ipairs(getgenv().SelectedSeeds) do
+            if not getgenv().AutoBuySeed then break end
+            pcall(function()
+                BuySeedEvent:FireServer(seed, true)
+            end)
+            task.wait(1.5)
+        end
+    end
+
+    if getgenv().AutoBuyGear and #getgenv().SelectedGears > 0 then
+        for _, gear in ipairs(getgenv().SelectedGears) do
+            if not getgenv().AutoBuyGear then break end
+            pcall(function()
+                BuyGearEvent:FireServer(gear, true)
+            end)
+            task.wait(1.5)
+        end
+    end
+end)
+---------------------------------------------------
+--// (AUTO SELL)
+--// Services
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+--// Player & Backpack
+local player = Players.LocalPlayer
+local backpack = player:WaitForChild("Backpack")
+local char = player.Character or player.CharacterAdded:Wait()
+
+--// Remote
+local SellEvent = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("ItemSell")
+
+--// Modules
+local BrainrotModule = require(ReplicatedStorage:WaitForChild("Modules"):WaitForChild("Utility"):WaitForChild("Util"))
+
+--// Settings
+getgenv().AutoSell = false
+getgenv().SellBelowKG = nil
+getgenv().SelectedRarities = {}
+getgenv().SkipMutations = {}
+
+--// Internal
+local AutoSellPaused = false
+local EquippedTool = nil
+local ScriptEquipping = false -- to ignore autosell equips
+local StopFlag = false
+
+--// Dropdown Lists
+local RarityList = {"Rare", "Epic", "Legendary", "Mythic", "Godly", "Secret", "Limited"}
+local MutationList = {"Gold", "Rainbow", "Diamond", "Neon", "Normal", "Magma", "UpsideDown", "Galactic"}
+
+--// Detect equip/unequip (only user-triggered)
+char.ChildAdded:Connect(function(child)
+	if child:IsA("Tool") then
+		EquippedTool = child
+		if not ScriptEquipping then -- only pause when it's *you* clicking
+			AutoSellPaused = true
+			StopFlag = true
+		end
+	end
+end)
+
+char.ChildRemoved:Connect(function(child)
+	if child:IsA("Tool") and child == EquippedTool then
+		EquippedTool = nil
+		task.wait(0.3)
+		AutoSellPaused = false
+		StopFlag = false
+	end
+end)
+
+--// Extract KG
+local function ExtractKG(name)
+	local kg = string.match(name, "%[(%d+%.?%d*)%s*kg%]")
+	return kg and tonumber(kg) or nil
+end
+
+--// Check if sellable
+local function CanSell(item)
+	local kg = ExtractKG(item.Name)
+	if not kg or not getgenv().SellBelowKG or kg >= getgenv().SellBelowKG then
+		return false
+	end
+
+	local mutation = item:GetAttribute("Mutation")
+	local rarity
+	local brainrotName = item:GetAttribute("Brainrot")
+
+	if brainrotName then
+		local entry = BrainrotModule:GetBrainrotEntry(brainrotName)
+		if entry then
+			rarity = entry.Rarity
+		end
+	else
+		rarity = item:GetAttribute("Rarity")
+	end
+
+	if #getgenv().SelectedRarities > 0 and rarity and table.find(getgenv().SelectedRarities, rarity) then
+		return false
+	end
+	if #getgenv().SkipMutations > 0 and mutation and table.find(getgenv().SkipMutations, mutation) then
+		return false
+	end
+
+	return true
+end
+
+--// Equip & Sell
+local function EquipAndSell(item)
+	if not item:IsA("Tool") then return end
+	pcall(function()
+		ScriptEquipping = true -- mark as script action
+		item.Parent = char
+		task.wait(0.15)
+		item:Activate()
+		task.wait(0.15)
+		SellEvent:FireServer(true, nil, true)
+		task.wait(0.45) -- safe slower sell rate
+		ScriptEquipping = false
+	end)
+end
+
+--// Auto-sell loop
+task.spawn(function()
+	while task.wait(0.35) do
+		if not getgenv().AutoSell or AutoSellPaused or StopFlag or EquippedTool then
+			continue
+		end
+
+		if getgenv().SellBelowKG and getgenv().SellBelowKG > 0 then
+			for _, item in ipairs(backpack:GetChildren()) do
+				if not getgenv().AutoSell or AutoSellPaused or StopFlag or EquippedTool then
+					break
+				end
+				if (item:IsA("Tool") or item:IsA("Model")) and CanSell(item) then
+					EquipAndSell(item)
+				end
+			end
+		end
+	end
+end)
+
+--// UI Setup
+local RarityDropdown = Tab2:AddDropdown("Skip Rarity", RarityList, {})
+RarityDropdown.OnChanged:Connect(function(val)
+	if typeof(val) == "table" then
+		getgenv().SelectedRarities = val
+	elseif typeof(val) == "string" and val ~= "" then
+		getgenv().SelectedRarities = {val}
+	else
+		getgenv().SelectedRarities = {}
+	end
+end)
+
+local MutationDropdown = Tab2:AddDropdown("Skip Mutations", MutationList, {})
+MutationDropdown.OnChanged:Connect(function(val)
+	if typeof(val) == "table" then
+		getgenv().SkipMutations = val
+	elseif typeof(val) == "string" and val ~= "" then
+		getgenv().SkipMutations = {val}
+	else
+		getgenv().SkipMutations = {}
+	end
+end)
+
+Tab2:AddTextBox("Sell Below KG", "Enter kg...", "", function(text)
+	local num = tonumber(text)
+	if num and num > 0 then
+		getgenv().SellBelowKG = num
+	else
+		getgenv().SellBelowKG = nil
+	end
+end)
+
+Tab2:AddToggle("Auto Sell", false, function(state)
+	getgenv().AutoSell = state
+end)
+---------------------------------------------------
+--// AUTO FAVORITE 
+--// AUTO FAVORITE (SAFE FINAL VERSION)
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+--// Player data
+local player = Players.LocalPlayer
+local backpack = player:WaitForChild("Backpack")
+
+--// Modules & Remotes
+local BrainrotModule = require(ReplicatedStorage:WaitForChild("Modules"):WaitForChild("Utility"):WaitForChild("Util"))
+local FavoriteEvent = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("FavoriteItem")
+
+--// Settings
+getgenv().AutoFavorite = false
+getgenv().FavoriteKG = nil
+getgenv().FavoriteRarities = {}
+
+--// Internal Cache
+local Processed = {}
+
+--// Lists
+local RarityList = {"Rare", "Epic", "Legendary", "Mythic", "Godly", "Secret", "Limited"}
+
+--// Extract KG
+local function ExtractKG(name)
+	local kg = string.match(name, "%[(%d+%.?%d*)%s*kg%]")
+	return kg and tonumber(kg) or nil
+end
+
+--// Should Favorite
+local function ShouldFavorite(tool)
+	if not tool:IsA("Tool") then return false end
+	if Processed[tool] then return false end
+	if tool:GetAttribute("Favorited") == true then
+		Processed[tool] = true
+		return false
+	end
+
+	local id = tool:GetAttribute("ID")
+	if not id then return false end
+
+	local kg = ExtractKG(tool.Name)
+	local rarity
+	local brainrotName = tool:GetAttribute("Brainrot")
+
+	if brainrotName then
+		local entry = BrainrotModule:GetBrainrotEntry(brainrotName)
+		if entry then rarity = entry.Rarity end
+	else
+		rarity = tool:GetAttribute("Rarity")
+	end
+
+	if (#getgenv().FavoriteRarities == 0) and not getgenv().FavoriteKG then
+		return false
+	end
+
+	local rarityMatch = (rarity and table.find(getgenv().FavoriteRarities, rarity))
+	local kgMatch = (getgenv().FavoriteKG and kg and kg >= getgenv().FavoriteKG)
+
+	return rarityMatch or kgMatch
+end
+
+--// Try Favorite (never unfavorites)
+local function TryFavorite(tool)
+	if not ShouldFavorite(tool) then return end
+	if tool:GetAttribute("Favorited") ~= true then
+		local id = tool:GetAttribute("ID")
+		if id then
+			FavoriteEvent:FireServer(id)
+			Processed[tool] = true
+		end
+	end
+end
+
+--// Scan Backpack once when enabled
+local function ScanBackpack()
+	for _, item in ipairs(backpack:GetChildren()) do
+		TryFavorite(item)
+	end
+end
+
+--// Handle new items
+backpack.ChildAdded:Connect(function(item)
+	if not getgenv().AutoFavorite then return end
+	task.wait(0.25)
+	TryFavorite(item)
+end)
+
+--// Periodic recheck
+task.spawn(function()
+	while task.wait(2) do
+		if not getgenv().AutoFavorite then continue end
+		for _, item in ipairs(backpack:GetChildren()) do
+			TryFavorite(item)
+		end
+	end
+end)
+
+--// UI Controls
+local FavRarityDropdown = Tab3:AddDropdown("Favorite Rarity", RarityList, {})
+FavRarityDropdown.OnChanged:Connect(function(val)
+	if typeof(val) == "table" then
+		getgenv().FavoriteRarities = val
+	elseif typeof(val) == "string" and val ~= "" then
+		getgenv().FavoriteRarities = {val}
+	else
+		getgenv().FavoriteRarities = {}
+	end
+end)
+
+Tab3:AddTextBox("Favorite KG and Above", "Enter kg...", "", function(text)
+	local num = tonumber(text)
+	if num and num > 0 then
+		getgenv().FavoriteKG = num
+	else
+		getgenv().FavoriteKG = nil
+	end
+end)
+
+Tab3:AddToggle("Auto Favorite", false, function(state)
+	getgenv().AutoFavorite = state
+	if state then
+		-- mark all already favorited as processed
+		for _, item in ipairs(backpack:GetChildren()) do
+			if item:GetAttribute("Favorited") == true then
+				Processed[item] = true
+			end
+		end
+		ScanBackpack()
+	else
+		table.clear(Processed)
+	end
+end)
+---------------------------------------------------
+--// WALK SPEED AND JUMP 
+--// Services
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+
+local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local humanoid = character:WaitForChild("Humanoid")
+
+--// Detect the real in-game default WalkSpeed (not hardcoded)
+local DefaultWalkSpeed = humanoid.WalkSpeed
+local CurrentSpeed = DefaultWalkSpeed
+local WalkSpeedEnabled = false
+local InfiniteJumpEnabled = false
+
+--// UI Elements
+Tab4:AddSlider("Speed", 0, 500, DefaultWalkSpeed, function(v)
+    CurrentSpeed = v
+    if WalkSpeedEnabled and humanoid then
+        humanoid.WalkSpeed = CurrentSpeed
+    end
+end)
+
+Tab4:AddToggle("Walk Speed", false, function(v)
+    WalkSpeedEnabled = v
+    if humanoid then
+        if v then
+            humanoid.WalkSpeed = CurrentSpeed
+        else
+            humanoid.WalkSpeed = DefaultWalkSpeed -- restore original game speed (like 25)
+        end
+    end
+end)
+
+Tab4:AddToggle("Infinite Jump", false, function(v)
+    InfiniteJumpEnabled = v
+end)
+
+--// Infinite Jump Logic
+UserInputService.JumpRequest:Connect(function()
+    if InfiniteJumpEnabled and humanoid then
+        humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+    end
+end)
+
+--// Respawn handling
+player.CharacterAdded:Connect(function(char)
+    character = char
+    humanoid = character:WaitForChild("Humanoid")
+
+    -- Redetect the game’s actual default WalkSpeed after respawn
+    DefaultWalkSpeed = humanoid.WalkSpeed
+
+    if WalkSpeedEnabled then
+        humanoid.WalkSpeed = CurrentSpeed
+    else
+        humanoid.WalkSpeed = DefaultWalkSpeed
+    end
+end)
